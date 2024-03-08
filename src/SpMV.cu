@@ -36,14 +36,15 @@ __global__ void d_SpMVMultiplication(MemoryManager* memory_manager,
 	VertexData* vertices = (VertexData*)memory;
   VertexData vertex = vertices[tid];
 	vertex_t edges_per_page = memory_manager->edges_per_page;
-  matrix_t vector_element{ 0 };
+  matrix_t vector_element = 0;
   AdjacencyIterator<EdgeDataMatrix> adjacency_iterator(pageAccess<EdgeDataMatrix>(memory, vertices[tid].mem_index, page_size, memory_manager->start_index));
   
   EdgeDataMatrix local_element;
   for (int i = 0; i < vertex.neighbours; ++i)
   {
     local_element = adjacency_iterator.getElement();
-    vector_element += local_element.matrix_value * input_vector[local_element.destination];
+    if(local_element.destination > 0 && local_element.destination <  memory_manager->next_free_vertex_index)
+      vector_element += local_element.matrix_value * input_vector[local_element.destination];
     adjacency_iterator.advanceIterator(i, edges_per_page, memory, page_size, memory_manager->start_index);
   }
 
@@ -233,24 +234,31 @@ __global__ void d_writeTransposeCSR(MemoryManager* memory_manager,
 
 //------------------------------------------------------------------------------
 //
+
+
+
 void SpMVManager::deviceSpMV(std::unique_ptr<MemoryManager>& memory_manager, 
                              const std::shared_ptr<Config>& config)
 {
   int batch_size = matrix_rows;
   int block_size = WARPSIZE * MULTIPLICATOR;
   int grid_size = (batch_size / MULTIPLICATOR) + 1;
-  bool warpsized = true;
+  bool warpsized = false;
 
+  
+  
   // Copy vector to device
   TemporaryMemoryAccessHeap temp_memory_dispenser(memory_manager.get(), memory_manager->next_free_vertex_index, sizeof(VertexData));
   d_input_vector = temp_memory_dispenser.getTemporaryMemory<matrix_t>(matrix_columns);
   d_result_vector = temp_memory_dispenser.getTemporaryMemory<matrix_t>(matrix_rows);
+
   HANDLE_ERROR(cudaMemcpy(d_input_vector,
                input_vector.get(),
                sizeof(matrix_t) * matrix_columns,
                cudaMemcpyHostToDevice));
 
-
+  cudaDeviceSynchronize();
+  auto s = std::chrono::high_resolution_clock::now();
 
   // Perform multiplication
   if (warpsized)
@@ -273,13 +281,21 @@ void SpMVManager::deviceSpMV(std::unique_ptr<MemoryManager>& memory_manager,
                                                             d_input_vector,
                                                             d_result_vector);
   }
-  
 
+  cudaDeviceSynchronize();
+  auto e = std::chrono::high_resolution_clock::now();
+
+  spmv_algo_time = std::chrono::duration_cast<std::chrono::microseconds>(e - s).count() / 1000.f;
+
+  s = std::chrono::high_resolution_clock::now();
   // Copy result to host
   HANDLE_ERROR(cudaMemcpy(result_vector.get(),
                d_result_vector,
                sizeof(matrix_t) * matrix_rows,
                cudaMemcpyDeviceToHost));
+  //cudaDeviceSynchronize();
+  e = std::chrono::high_resolution_clock::now();
+  spmv_sync_time = std::chrono::duration_cast<std::chrono::microseconds>(e - s).count() / 1000.f;
 
   return;
 }

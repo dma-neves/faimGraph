@@ -32,6 +32,10 @@ public:
   void transposeaim2CSR2aim(std::unique_ptr<faimGraph<VertexData, VertexUpdate, EdgeDataType, EdgeDataUpdate>>& faimgraph, const std::shared_ptr<Config>& config);
   void transpose(std::unique_ptr<MemoryManager>& memory_manager, const std::shared_ptr<Config>& config);
 
+
+  float spmv_algo_time;
+  float spmv_sync_time;
+
 private:
   vertex_t matrix_rows;
   vertex_t matrix_columns;

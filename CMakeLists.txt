@@ -53,6 +53,11 @@ if (CUDA_BUILD_DEBUG)
 	string(APPEND CMAKE_CUDA_FLAGS " -G")
 endif ()
 
+
+	
+string(APPEND CMAKE_CUDA_FLAGS " -D CUDA_FORCE_CDP1_IF_SUPPORTED")
+
+
 ##########################################################################
 # CXX Flags
 if(WIN32)
